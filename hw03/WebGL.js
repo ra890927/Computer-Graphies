@@ -26,20 +26,24 @@ var FSHADER_SOURCE = `
     uniform float u_shininess;
     uniform sampler2D u_Sampler;
     uniform vec3 u_Color;
+    uniform int u_useTexture;
     varying vec3 v_Normal;
     varying vec3 v_PositionInWorld;
-    uniform int u_useTexture;
     varying vec2 v_TexCoord;
     void main(){
         // let ambient and diffuse color are u_Color 
         // (you can also input them from ouside and make them different)
-        vec3 ambientLightColor = u_Color;
-        vec3 diffuseLightColor = u_Color;
+        vec3 ambientLightColor;
+        vec3 diffuseLightColor;
 
         if(bool(u_useTexture)){
             vec3 texColor = texture2D( u_Sampler, v_TexCoord ).rgb;
             ambientLightColor = texColor;
             diffuseLightColor = texColor;
+        }
+        else{
+            ambientLightColor = u_Color;
+            diffuseLightColor = u_Color;
         }
 
         // assume white specular light (you can also input it from ouside)
@@ -355,8 +359,8 @@ function drawOneObject(obj, mdlMatrix, colorR, colorG, colorB, image_name){
     gl.uniform1f(program.u_Ks, 1.0);
     gl.uniform1f(program.u_shininess, 10.0);
     gl.uniform3f(program.u_Color, colorR, colorG, colorB);
-    if(image_name) gl.uniform1f(program.u_shininess, 1);
-    else gl.uniform1f(program.u_useTexture, 0);
+    if(image_name) gl.uniform1i(program.u_useTexture, 1);
+    else gl.uniform1i(program.u_useTexture, 0);
 
 
     gl.uniformMatrix4fv(program.u_MvpMatrix, false, mvpMatrix.elements);
