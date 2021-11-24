@@ -24,43 +24,47 @@ var FSHADER_SOURCE = `
     uniform float u_Kd;
     uniform float u_Ks;
     uniform float u_shininess;
-    uniform sampler2D u_Sampler;
-    uniform vec3 u_Color;
-    uniform int u_useTexture;
+    uniform sampler2D u_Sampler;    // texture sampler
+    uniform vec3 u_Color;           // object color
+    uniform int u_useTexture;       // whether use texture
     varying vec3 v_Normal;
     varying vec3 v_PositionInWorld;
     varying vec2 v_TexCoord;
     void main(){
-        // let ambient and diffuse color are u_Color 
-        // (you can also input them from ouside and make them different)
+        // define light color
         vec3 ambientLightColor;
         vec3 diffuseLightColor;
 
         if(bool(u_useTexture)){
+            // use texture color
             vec3 texColor = texture2D( u_Sampler, v_TexCoord ).rgb;
             ambientLightColor = texColor;
             diffuseLightColor = texColor;
         }
         else{
+            // use specified color
             ambientLightColor = u_Color;
             diffuseLightColor = u_Color;
         }
 
-        // assume white specular light (you can also input it from ouside)
+        // assume white specular light
         vec3 specularLightColor = vec3(1.0, 1.0, 1.0);        
 
         vec3 ambient = ambientLightColor * u_Ka;
 
         vec3 normal = normalize(v_Normal);
+        // compute lihgt direction vector
         vec3 lightDirection = normalize(u_LightPosition - v_PositionInWorld);
+        // if angle larger than 90, do not use
         float nDotL = max(dot(lightDirection, normal), 0.0);
         vec3 diffuse = diffuseLightColor * u_Kd * nDotL;
 
         vec3 specular = vec3(0.0, 0.0, 0.0);
         if(nDotL > 0.0) {
-            vec3 R = reflect(-lightDirection, normal);
-            // V: the vector, point to viewer       
+            // compute the reflection of light vector
+            vec3 R = reflect(-lightDirection, normal);  // notice that there probably have opposite direction
             vec3 V = normalize(u_ViewPosition - v_PositionInWorld); 
+            // compute the angle of reflection and view point
             float specAngle = clamp(dot(R, V), 0.0, 1.0);
             specular = u_Ks * pow(specAngle, u_shininess) * specularLightColor; 
         }
@@ -106,7 +110,7 @@ function compileShader(gl, vShaderText, fShaderText){
 }
 
 /////BEGIN:///////////////////////////////////////////////////////////////////////////////////////////////
-/////The folloing three function is for creating vertex buffer, but link to shader to user later//////////
+/////The following three function is for creating vertex buffer, but link to shader to user later//////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 function initAttributeVariable(gl, a_attribute, buffer){
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -133,8 +137,6 @@ function initArrayBufferForLaterUse(gl, data, num, type) {
 }
 
 function initVertexBufferForLaterUse(gl, vertices, normals, texCoords){
-    // console.log(texCoords)
-
     var nVertices = vertices.length / 3;
 
     var o = new Object();
@@ -192,13 +194,13 @@ var normalMatrix;
 var nVertex;
 var cameraX = 3, cameraY = 3, cameraZ = 7;
 
-var textures = {};
-var imgNames = ["Steve.png"];
-var objCompImgIndex = ["Steve.png"];
+var textures = {};                      // texture object
+var imgNames = ["Steve.png"];           // define image name
+var objCompImgIndex = ["Steve.png"];    // this will be removed
 
-var steve = [];
-var sonic = [];
-var cube = [];
+var steve = [];                         // steve object
+var sonic = [];                         
+var cube = [];                          // cube object
 var texCount = 0;
 var moveDistance = 0;
 var rotateAngle = 0;
@@ -232,11 +234,11 @@ async function main(){
     program.u_Sampler = gl.getUniformLocation(program, "u_Sampler");
     program.u_useTexture = gl.getUniformLocation(program, "u_useTexture");
 
-    /////3D model steve
+    // 3D model steve
     response = await fetch('steve.obj');
     text = await response.text();
     obj = parseOBJ(text);
-    for( let i=0; i < obj.geometries.length; i ++ ){
+    for( let i=0; i < obj.geometries.length; i++ ){
         let o = initVertexBufferForLaterUse(gl, 
                                             obj.geometries[i].data.position,
                                             obj.geometries[i].data.normal, 
@@ -244,6 +246,7 @@ async function main(){
         steve.push(o);
     }
 
+    // initialize texture
     for(let i = 0; i < imgNames.length; i++){
         let image = new Image();
         image.onload = function(){
@@ -264,9 +267,7 @@ async function main(){
     //     sonic.push(o);
     // }
 
-    ////cube
-    //TODO-1: create vertices for the cube whose edge length is 2.0 (or 1.0 is also fine)
-    //F: Face, T: Triangle
+    // define cube nodes
     cubeVertices = [
         1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, //front
         1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, //right
@@ -285,7 +286,7 @@ async function main(){
 
     gl.enable(gl.DEPTH_TEST);
 
-    draw();//draw it once before mouse move
+    draw();     //draw it once before mouse move
 
     canvas.onmousedown = function(ev){mouseDown(ev)};
     canvas.onmousemove = function(ev){mouseMove(ev)};
@@ -304,23 +305,20 @@ async function main(){
     }
 }
 
-/////Call drawOneObject() here to draw all object one by one 
-////   (setup the model matrix and color to draw)
 function draw(){
+    // clear canvas
     gl.clearColor(0,0,0,1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     let mdlMatrix = new Matrix4(); //model matrix of objects
 
-    //Cube (ground)
-    //TODO-1: set mdlMatrix for the cube
+    // setup ground with cube
     mdlMatrix.scale(2.0, 0.1, 2.0);
     mdlMatrix.translate(0.0, -7.5, 0.0);
     drawOneObject(cube, mdlMatrix, 1.0, 0.4, 0.4);
     mdlMatrix.setIdentity();
 
-    //mario
-    //TODO-2: set mdlMatrix for mario
+    // setup steve
     mdlMatrix.rotate(-90, 0, 1, 0);
     mdlMatrix.translate(0.0, -0.75, 0.0);
     mdlMatrix.scale(0.15, 0.15, 0.15);
@@ -335,14 +333,12 @@ function draw(){
     // drawOneObject(sonic, mdlMatrix, 0.4, 0.4, 1.0);
 }
 
-//obj: the object components
-//mdlMatrix: the model matrix without mouse rotation
-//colorR, G, B: object color
 function drawOneObject(obj, mdlMatrix, colorR, colorG, colorB, image_name){
     //model Matrix (part of the mvp matrix)
     modelMatrix.setRotate(angleY, 1, 0, 0);//for mouse rotation
     modelMatrix.rotate(angleX, 0, 1, 0);//for mouse rotation
     modelMatrix.multiply(mdlMatrix);
+
     //mvp: projection * view * model matrix  
     mvpMatrix.setPerspective(30, 1, 1, 100);
     mvpMatrix.lookAt(cameraX, cameraY, cameraZ, 0, 0, 0, 0, 1, 0);
@@ -359,23 +355,20 @@ function drawOneObject(obj, mdlMatrix, colorR, colorG, colorB, image_name){
     gl.uniform1f(program.u_Ks, 1.0);
     gl.uniform1f(program.u_shininess, 10.0);
     gl.uniform3f(program.u_Color, colorR, colorG, colorB);
-    if(image_name) gl.uniform1i(program.u_useTexture, 1);
+    // use texture
+    if(image_name){
+        gl.uniform1i(program.u_useTexture, 1);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, textures[image_name]);
+        gl.uniform1i(program.u_Sampler, 0);
+    }
     else gl.uniform1i(program.u_useTexture, 0);
-
 
     gl.uniformMatrix4fv(program.u_MvpMatrix, false, mvpMatrix.elements);
     gl.uniformMatrix4fv(program.u_modelMatrix, false, modelMatrix.elements);
-    gl.uniformMatrix4fv(program.u_normalMatrix, false, normalMatrix.elements);
+    gl.uniformMatrix4fv(program.u_normalMatrix, false, normalMatrix.elements);    
 
-    // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, textures[image_name]);
-    gl.uniform1i(program.u_Sampler, 0);
-
-    // console.log(textures[image_name])
-
-    for( let i=0; i < obj.length; i ++ ){
+    for(let i = 0; i < obj.length; i++){
         initAttributeVariable(gl, program.a_Position, obj[i].vertexBuffer);
         initAttributeVariable(gl, program.a_Normal, obj[i].normalBuffer);
         if(image_name) initAttributeVariable(gl, program.a_TexCoord, obj[i].texCoordBuffer);
