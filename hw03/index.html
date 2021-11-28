@@ -11,9 +11,13 @@
         </canvas>
         <script src="cuon-matrix.js"></script>
         <script src="WebGL.js"></script>
-        <div class="slidecontainer1">
-            Move:<input type="range" min="-100" max="100" value="0" class="slider" id="move">
-            Rotate:<input type="range" min="-180" max="180" value="0" class="slider" id="rotate">
+        <script src="shape-def.js"></script>
+        <div style="display: flex; flex-direction: column; justify-content: center; width: 40vw;">
+            Scale: <input type="range" min="5" max="15" value="10" id="scale">
+            Tank x: <input type="range" min="-8" max="8" value="0" id="tank_x">
+            Tank y: <input type="range" min="-8" max="8" value="0" id="tank_y">
+            Direction: <input type="range" min="-90" max="90" value="0" id="direction">
+            Veritcal: <input type="range" min="0" max="80" value="0" id="vertical">
         </div>
     </body>
 </html>

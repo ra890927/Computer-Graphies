@@ -187,6 +187,11 @@ function getNormalOnVertices(vertices){
 var mouseLastX, mouseLastY;
 var mouseDragging = false;
 var angleX = 0, angleY = 0;
+var scale = 1.0;
+var tank_x = 3.0;
+var tank_y = 0.0;
+var direction = 0.0;
+var vertical = 0.0;
 var gl, canvas;
 var mvpMatrix;
 var modelMatrix;
@@ -195,12 +200,15 @@ var nVertex;
 var cameraX = 3, cameraY = 3, cameraZ = 7;
 
 var textures = {};                      // texture object
-var imgNames = ["Steve.png"];           // define image name
-var objCompImgIndex = ["Steve.png"];    // this will be removed
+var imgNames = ["Steve.png", "trump.png"];          // define image name
+var objCompImgIndex = ["Steve.png", "trump.png"];   // this will be removed
 
 var steve = [];                         // steve object
-var sonic = [];                         
+var trump = [];                         // trump object
 var cube = [];                          // cube object
+var ball = [];                          // ball object
+var pyramid = [];                       // pyramid object
+var cylinder = [];                      // cylinder object
 var texCount = 0;
 var moveDistance = 0;
 var rotateAngle = 0;
@@ -246,6 +254,18 @@ async function main(){
         steve.push(o);
     }
 
+    // 3D model trump
+    response = await fetch('trump.obj');
+    text = await response.text();
+    obj = parseOBJ(text);
+    for( let i=0; i < obj.geometries.length; i++ ){
+        let o = initVertexBufferForLaterUse(gl, 
+                                            obj.geometries[i].data.position,
+                                            obj.geometries[i].data.normal, 
+                                            obj.geometries[i].data.texcoord);
+        trump.push(o);
+    }
+
     // initialize texture
     for(let i = 0; i < imgNames.length; i++){
         let image = new Image();
@@ -255,30 +275,21 @@ async function main(){
         image.src = imgNames[i];
     }
 
-    /////3D model sonic
-    // response = await fetch('sonic.obj');
-    // text = await response.text();
-    // obj = parseOBJ(text);
-    // for( let i=0; i < obj.geometries.length; i ++ ){
-    //     let o = initVertexBufferForLaterUse(gl, 
-    //                                         obj.geometries[i].data.position,
-    //                                         obj.geometries[i].data.normal, 
-    //                                         obj.geometries[i].data.texcoord);
-    //     sonic.push(o);
-    // }
-
-    // define cube nodes
-    cubeVertices = [
-        1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, //front
-        1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, //right
-        1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, //up
-        -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, //left
-        -1.0, -1.0, 1.0, -1.0, -1.0, -1.0, 1.0, -1.0, -1.0,  1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, //bottom
-        1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0 //back
-    ];
-    cubeNormals = getNormalOnVertices(cubeVertices);
-    let o = initVertexBufferForLaterUse(gl, cubeVertices, cubeNormals, null);
+    cube_normal = getNormalOnVertices(cube_vertices);
+    o = initVertexBufferForLaterUse(gl, cube_vertices, cube_normal, null);
     cube.push(o);
+
+    ball_normal = getNormalOnVertices(ball_vertices());
+    o = initVertexBufferForLaterUse(gl, ball_vertices(), ball_normal, null);
+    ball.push(o);
+
+    cylinder_normal = getNormalOnVertices(cylinder_vertices());
+    o = initVertexBufferForLaterUse(gl, cylinder_vertices(), cylinder_normal, null);
+    cylinder.push(o);
+
+    pyramid_normal = getNormalOnVertices(pyramid_vertices);
+    o = initVertexBufferForLaterUse(gl, pyramid_vertices, pyramid_normal, null);
+    pyramid.push(o);
 
     mvpMatrix = new Matrix4();
     modelMatrix = new Matrix4();
@@ -292,15 +303,33 @@ async function main(){
     canvas.onmousemove = function(ev){mouseMove(ev)};
     canvas.onmouseup = function(ev){mouseUp(ev)};
 
-    var slider1 = document.getElementById("move");
-    slider1.oninput = function() {
-        moveDistance = this.value / 60.0
+    var scale_slider = document.getElementById("scale");
+    scale_slider.oninput = function(){
+        scale = this.value / 10;
         draw();
     }
 
-    var slider2 = document.getElementById("rotate");
-    slider2.oninput = function() {
-        rotateAngle = this.value 
+    var tankx_slider = document.getElementById("tank_x");
+    tankx_slider.oninput = function(){
+        tank_x = Number(this.value) + 3;
+        draw();
+    }
+
+    var tanky_slider = document.getElementById("tank_y");
+    tanky_slider.oninput = function(){
+        tank_y = this.value;
+        draw();
+    }
+
+    var direction_slider = document.getElementById("direction");
+    direction_slider.oninput = function(){
+        direction = this.value;
+        draw();
+    }
+
+    var vertical_slider = document.getElementById("vertical");
+    vertical_slider.oninput = function(){
+        vertical = this.value;
         draw();
     }
 }
@@ -310,33 +339,143 @@ function draw(){
     gl.clearColor(0,0,0,1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+    let srcMatrix = new Matrix4();
+    srcMatrix.translate(tank_x, 0.0, tank_y);
     let mdlMatrix = new Matrix4(); //model matrix of objects
 
+    // set light location
+    mdlMatrix.translate(0.0, 5.0, 3.0);
+    mdlMatrix.scale(0.2, 0.2, 0.2);
+    drawOneObject(ball, mdlMatrix, 1.0, 1.0, 1.0);
+    mdlMatrix.setIdentity();
+
     // setup ground with cube
-    mdlMatrix.scale(2.0, 0.1, 2.0);
-    mdlMatrix.translate(0.0, -7.5, 0.0);
-    drawOneObject(cube, mdlMatrix, 1.0, 0.4, 0.4);
+    mdlMatrix.translate(0.0, -0.4, 0.0);
+    mdlMatrix.scale(9.0, 0.1, 9.0);
+    drawOneObject(cube, mdlMatrix, 0.7, 0.7, 0.7);
+    mdlMatrix.setIdentity();
+
+    mdlMatrix.translate(-5.0, -0.3, 0.0);
+    mdlMatrix.rotate(90, 0, 1, 0);
+    drawOneObject(trump, mdlMatrix, 1.0, 1.0, 1.0, "trump.png");
+    mdlMatrix.setIdentity();
+
+    // left front wheel
+    mdlMatrix.translate(2.0, 0.0, 0.8);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.scale(0.3, 0.3, 0.3);
+    drawOneObject(cylinder, mdlMatrix, 0.0, 0.7, 0.0);
+    mdlMatrix.setIdentity();
+
+    // left front pyramid
+    mdlMatrix.translate(2.1, 0.0, 1.3);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.rotate(90, 1, 0, 0);
+    mdlMatrix.scale(0.2, 0.2, 0.2);
+    drawOneObject(pyramid, mdlMatrix, 1.0, 1.0, 0.0);
+    mdlMatrix.setIdentity();
+
+    // left back wheel
+    mdlMatrix.translate(4.0, 0.0, 0.8);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.scale(0.3, 0.3, 0.3);
+    drawOneObject(cylinder, mdlMatrix, 0.0, 0.7, 0.0);
+    mdlMatrix.setIdentity();
+
+    // left back pyramid
+    mdlMatrix.translate(3.9, 0.0, 1.3);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.rotate(90, 1, 0, 0);
+    mdlMatrix.scale(0.2, 0.2, 0.2);
+    drawOneObject(pyramid, mdlMatrix, 1.0, 1.0, 0.0);
+    mdlMatrix.setIdentity();
+
+    // right front wheel
+    mdlMatrix.translate(2.0, 0.0, -0.8);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.scale(0.3, 0.3, 0.3);
+    drawOneObject(cylinder, mdlMatrix, 0.0, 0.7, 0.0);
+    mdlMatrix.setIdentity();
+
+    // right front pyramid
+    mdlMatrix.translate(2.1, 0.0, -1.3);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.rotate(90, -1, 0, 0);
+    mdlMatrix.scale(0.2, 0.2, 0.2);
+    drawOneObject(pyramid, mdlMatrix, 1.0, 1.0, 0.0);
+    mdlMatrix.setIdentity();
+
+    // right back wheel
+    mdlMatrix.translate(4.0, 0.0, -0.8);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.scale(0.3, 0.3, 0.3);
+    drawOneObject(cylinder, mdlMatrix, 0.0, 0.7, 0.0);
+    mdlMatrix.setIdentity();
+
+    // right back pyramid
+    mdlMatrix.translate(3.9, 0.0, -1.3);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.rotate(90, -1, 0, 0);
+    mdlMatrix.scale(0.2, 0.2, 0.2);
+    drawOneObject(pyramid, mdlMatrix, 1.0, 1.0, 0.0);
+    mdlMatrix.setIdentity();
+
+    // left rectangle
+    mdlMatrix.translate(3.0, 0.0, 0.8);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.scale(1.0, 0.3, 0.3);
+    drawOneObject(cube, mdlMatrix, 0.0, 0.7, 0.0);
+    mdlMatrix.setIdentity();
+
+    // right rectangle
+    mdlMatrix.translate(3.0, 0.0, -0.8);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.scale(1.0, 0.3, 0.3);
+    drawOneObject(cube, mdlMatrix, 0.0, 0.7, 0.0);
+    mdlMatrix.setIdentity();
+
+    srcMatrix.rotate(direction, 0, 1, 0);
+
+    // center base
+    mdlMatrix.translate(3.0, 0.3, 0.0);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.scale(0.7, 0.3, 0.7);
+    drawOneObject(cube, mdlMatrix, 0.8, 0.8, 0.0);
+    mdlMatrix.setIdentity();
+
+    // center fort
+    mdlMatrix.translate(3.0, 0.6, 0.0);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.scale(0.5, 0.5, 0.5);
+    drawOneObject(ball, mdlMatrix, 0.8, 0.8, 0.0);
     mdlMatrix.setIdentity();
 
     // setup steve
-    mdlMatrix.rotate(-90, 0, 1, 0);
-    mdlMatrix.translate(0.0, -0.75, 0.0);
+    mdlMatrix.translate(3.0, 0.5, 0.0);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.rotate(180, 0, 1, 0);
+    mdlMatrix.translate(-0.6, 0.0, 0.0);
     mdlMatrix.scale(0.15, 0.15, 0.15);
     drawOneObject(steve, mdlMatrix, 0.4, 1.0, 0.4, "Steve.png");
     mdlMatrix.setIdentity();
 
-    //sonic
-    //TODO-3: set mdlMatrix for sonic (include rotation and movement)
-    // mdlMatrix.translate(moveDistance, -0.65, 0.0);
-    // mdlMatrix.rotate(rotateAngle, 0.0, 1.0, 0.0);
-    // mdlMatrix.scale(0.05, 0.05, 0.05);
-    // drawOneObject(sonic, mdlMatrix, 0.4, 0.4, 1.0);
+    srcMatrix.rotate(vertical, 0, 0, -1);
+
+    // gun barrel
+    mdlMatrix.translate(3.0, 0.85, 0.0);
+    mdlMatrix.multiply(srcMatrix);
+    mdlMatrix.rotate(90, 0, 1, 0);
+    mdlMatrix.translate(0.0, 0.0, -1.0);
+    mdlMatrix.scale(0.15, 0.15, 1.0);
+    drawOneObject(cylinder, mdlMatrix, 0.0, 0.7, 0.0);
+    mdlMatrix.setIdentity();
 }
 
 function drawOneObject(obj, mdlMatrix, colorR, colorG, colorB, image_name){
     //model Matrix (part of the mvp matrix)
     modelMatrix.setRotate(angleY, 1, 0, 0);//for mouse rotation
     modelMatrix.rotate(angleX, 0, 1, 0);//for mouse rotation
+    modelMatrix.scale(scale * 0.3, scale * 0.3, scale * 0.3);
     modelMatrix.multiply(mdlMatrix);
 
     //mvp: projection * view * model matrix  
