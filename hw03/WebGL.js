@@ -196,6 +196,8 @@ var tank_x = 3.0;
 var tank_y = 0.0;
 var direction = 0.0;
 var vertical = 0.0;
+var dir_dis = 5;
+var ver_dis = 5;
 var gl, canvas;
 var mvpMatrix;
 var modelMatrix;
@@ -316,13 +318,33 @@ async function main(){
 
     var tankx_slider = document.getElementById("tank_x");
     tankx_slider.oninput = function(){
-        tank_x = Number(this.value) + 3;
+        tank_x = Number(this.value) / 10 + 3;
+        
+        if(direction + dir_dis >= 90) dir_dis = -5;
+        else if(direction + dir_dis <= -90) dir_dis = 5;
+
+        if(vertical + ver_dis >= 80) ver_dis = -5;
+        else if(vertical + ver_dis <= 0) ver_dis = 5;
+
+        direction += dir_dis;
+        vertical += ver_dis;
+
         draw();
     }
 
     var tanky_slider = document.getElementById("tank_y");
     tanky_slider.oninput = function(){
-        tank_y = this.value;
+        tank_y = Number(this.value) / 10;
+
+        if(direction + dir_dis >= 90) dir_dis = -5;
+        else if(direction + dir_dis <= -90) dir_dis = 5;
+
+        if(vertical + ver_dis >= 80) ver_dis = -5;
+        else if(vertical + ver_dis <= 0) ver_dis = 5;
+
+        direction += dir_dis;
+        vertical += ver_dis;
+
         draw();
     }
 
