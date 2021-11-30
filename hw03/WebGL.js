@@ -2,10 +2,13 @@ var VSHADER_SOURCE = `
     attribute vec4 a_Position;
     attribute vec4 a_Normal;
     attribute vec2 a_TexCoord;
+    uniform vec4 u_LightPosition;
     uniform mat4 u_MvpMatrix;
     uniform mat4 u_modelMatrix;
     uniform mat4 u_normalMatrix;
+    uniform mat4 u_lightMatrix;
     varying vec3 v_Normal;
+    varying vec3 v_LightPosition;
     varying vec3 v_PositionInWorld;
     varying vec2 v_TexCoord;
     void main(){
@@ -13,12 +16,12 @@ var VSHADER_SOURCE = `
         v_PositionInWorld = (u_modelMatrix * a_Position).xyz; 
         v_Normal = normalize(vec3(u_normalMatrix * a_Normal));
         v_TexCoord = a_TexCoord;
+        v_LightPosition = (u_lightMatrix * u_LightPosition).xyz;
     }    
 `;
 
 var FSHADER_SOURCE = `
     precision mediump float;
-    uniform vec3 u_LightPosition;
     uniform vec3 u_ViewPosition;
     uniform float u_Ka;
     uniform float u_Kd;
@@ -27,6 +30,7 @@ var FSHADER_SOURCE = `
     uniform sampler2D u_Sampler;    // texture sampler
     uniform vec3 u_Color;           // object color
     uniform int u_useTexture;       // whether use texture
+    varying vec3 v_LightPosition;   // transformed light position
     varying vec3 v_Normal;
     varying vec3 v_PositionInWorld;
     varying vec2 v_TexCoord;
@@ -54,7 +58,7 @@ var FSHADER_SOURCE = `
 
         vec3 normal = normalize(v_Normal);
         // compute lihgt direction vector
-        vec3 lightDirection = normalize(u_LightPosition - v_PositionInWorld);
+        vec3 lightDirection = normalize(v_LightPosition - v_PositionInWorld);
         // if angle larger than 90, do not use
         float nDotL = max(dot(lightDirection, normal), 0.0);
         vec3 diffuse = diffuseLightColor * u_Kd * nDotL;
@@ -187,7 +191,7 @@ function getNormalOnVertices(vertices){
 var mouseLastX, mouseLastY;
 var mouseDragging = false;
 var angleX = 0, angleY = 0;
-var scale = 1.0;
+var scale = 0.3;
 var tank_x = 3.0;
 var tank_y = 0.0;
 var direction = 0.0;
@@ -232,6 +236,7 @@ async function main(){
     program.u_MvpMatrix = gl.getUniformLocation(program, 'u_MvpMatrix'); 
     program.u_modelMatrix = gl.getUniformLocation(program, 'u_modelMatrix'); 
     program.u_normalMatrix = gl.getUniformLocation(program, 'u_normalMatrix');
+    program.u_lightMatrix = gl.getUniformLocation(program, 'u_lightMatrix');
     program.u_LightPosition = gl.getUniformLocation(program, 'u_LightPosition');
     program.u_ViewPosition = gl.getUniformLocation(program, 'u_ViewPosition');
     program.u_Ka = gl.getUniformLocation(program, 'u_Ka'); 
@@ -305,7 +310,7 @@ async function main(){
 
     var scale_slider = document.getElementById("scale");
     scale_slider.oninput = function(){
-        scale = this.value / 10;
+        scale = Number(this.value) * 3 / 100;
         draw();
     }
 
@@ -344,8 +349,8 @@ function draw(){
     let mdlMatrix = new Matrix4(); //model matrix of objects
 
     // set light location
-    mdlMatrix.translate(0.0, 5.0, 3.0);
-    mdlMatrix.scale(0.2, 0.2, 0.2);
+    mdlMatrix.translate(0.0 , 5.0, 3.0);
+    mdlMatrix.scale(0.3, 0.3, 0.3);
     drawOneObject(ball, mdlMatrix, 1.0, 1.0, 1.0);
     mdlMatrix.setIdentity();
 
@@ -473,9 +478,12 @@ function draw(){
 
 function drawOneObject(obj, mdlMatrix, colorR, colorG, colorB, image_name){
     //model Matrix (part of the mvp matrix)
-    modelMatrix.setRotate(angleY, 1, 0, 0);//for mouse rotation
-    modelMatrix.rotate(angleX, 0, 1, 0);//for mouse rotation
-    modelMatrix.scale(scale * 0.3, scale * 0.3, scale * 0.3);
+    modelMatrix.setRotate(angleY, 1, 0, 0);     //for mouse rotation
+    modelMatrix.rotate(angleX, 0, 1, 0);        //for mouse rotation
+    modelMatrix.scale(scale, scale, scale);
+
+    gl.uniformMatrix4fv(program.u_lightMatrix, false, modelMatrix.elements);
+
     modelMatrix.multiply(mdlMatrix);
 
     //mvp: projection * view * model matrix  
@@ -487,7 +495,7 @@ function drawOneObject(obj, mdlMatrix, colorR, colorG, colorB, image_name){
     normalMatrix.setInverseOf(modelMatrix);
     normalMatrix.transpose();
 
-    gl.uniform3f(program.u_LightPosition, 0, 5, 3);
+    gl.uniform4f(program.u_LightPosition, 0.0, 5.0, 3.0, 1.0);
     gl.uniform3f(program.u_ViewPosition, cameraX, cameraY, cameraZ);
     gl.uniform1f(program.u_Ka, 0.2);
     gl.uniform1f(program.u_Kd, 0.7);
