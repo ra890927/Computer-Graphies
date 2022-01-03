@@ -4,7 +4,7 @@ var mouseDragging = false;
 
 // render image parameter
 var angleX = 0, angleY = 0;
-var scale = 0.4;
+var scale = 1.5;
 var tank_x = 3.0;
 var tank_y = 0.0;
 var direction = 0.0;
@@ -19,46 +19,58 @@ var offCameraDirX = 0, offCameraDirY = -1, offCameraDirZ = -1;   // offscreen vi
 
 // render demanded matrix
 var gl, canvas, reflectBall;
-// var mvpMatrix;
-// var modelMatrix;
-// var normalMatrix;
-
-// camera view
-var cameraX = 0, cameraY = 0, cameraZ = 5;              // view position
-var cameraDirX = 0, cameraDirY = 0, cameraDirZ = -1;    // view direction
 
 var camera = {
-    first: {
-        pos_x: 0,
-        pos_y: 0,
-        pos_z: 5,
-        dir_x: 0,
-        dir_y: 0,
-        dir_z: -1,
-    },
-    third: {
-        pos_x: 0,
-        pos_y: 5,
-        pos_z: 5,
-        dir_x: 0,
-        dir_y: -1,
-        dir_z: -1,
+    war: {
+        first: {
+            pos_x: 0,
+            pos_y: 0,
+            pos_z: 5,
+            dir_x: 0,
+            dir_y: 0,
+            dir_z: -1,
+        },
+        third: {
+            pos_x: 0,
+            pos_y: -16,
+            pos_z: 38,
+            dir_x: 0,
+            dir_y: 16,
+            dir_z: -38,
+        },
     },
     outspace: {
-        pos_x: 0,
-        pos_y: 0,
-        pos_z: 5,
-        dir_x: 0,
-        dir_y: 0,
-        dir_z: -1,
-    }
+        first: {
+            pos_x: 0,
+            pos_y: -16,
+            pos_z: 38,
+            dir_x: 0,
+            dir_y: 16,
+            dir_z: -38,
+        },
+        third: {
+            pos_x: 0,
+            pos_y: -16,
+            pos_z: 41,
+            dir_x: 0,
+            dir_y: 16,
+            dir_z: -38,
+        },
+    },
 }
+
+var perspective = true;
+var steve_view = {};
+var current_screen = 'outspace';
+var current_pers = camera.outspace.first;
 
 // image name and object
 var textures = {};                                      // texture object
 var imgNames = [                                        // define image name
     "Steve.png",
     "trump.png",
+    "151_norm.jpg",
+    "184_norm.jpg",
 ];
 
 // 3D item object
@@ -157,9 +169,12 @@ async function main(){
     // initialize framebuffer object
     reflectBall = initFrameBufferForCubemapRendering(gl);
     quadObj = initVertexBufferForLaterUse(gl, quad);
-    cubeMapTex = await initCubeTexture("px.jpg", "nx.jpg", "py.jpg", "ny.jpg", 
-                                 "pz.jpg", "nz.jpg", 350, 350)
-
+    // cubeMapTex = initCubeTexture("posx.jpg", "negx.jpg", "posy.jpg", "negy.jpg", 
+    //     "posz.jpg", "negz.jpg", 2048, 2048);
+    
+    cubeMapTex = initCubeTexture("px.jpg", "nx.jpg", "py.jpg", "ny.jpg", 
+        "pz.jpg", "nz.jpg", 350, 350);
+    
     // define environment cubemap shader
     programEnvCube = compileShader(gl, VSHADER_SOURCE_ENVCUBE, FSHADER_SOURCE_ENVCUBE);
     programEnvCube.a_Position = gl.getAttribLocation(programEnvCube, 'a_Position'); 
@@ -172,11 +187,14 @@ async function main(){
     gl.useProgram(program);
     program.a_Position = gl.getAttribLocation(program, 'a_Position');
     program.a_TexCoord = gl.getAttribLocation(program, 'a_TexCoord');
+    program.a_NormalCoord = gl.getAttribLocation(program, 'a_NormalCoord');
     program.a_Normal = gl.getAttribLocation(program, 'a_Normal'); 
+    program.a_Tagent = gl.getAttribLocation(program, 'a_Tagent');
+    program.a_Bitagent = gl.getAttribLocation(program, 'a_Bitagent');
+    program.a_crossTexCoord = gl.getAttribLocation(program, 'a_crossTexCoord');
     program.u_MvpMatrix = gl.getUniformLocation(program, 'u_MvpMatrix'); 
     program.u_modelMatrix = gl.getUniformLocation(program, 'u_modelMatrix'); 
     program.u_normalMatrix = gl.getUniformLocation(program, 'u_normalMatrix');
-    program.u_lightMatrix = gl.getUniformLocation(program, 'u_lightMatrix');
     program.u_LightPosition = gl.getUniformLocation(program, 'u_LightPosition');
     program.u_ViewPosition = gl.getUniformLocation(program, 'u_ViewPosition');
     program.u_Ka = gl.getUniformLocation(program, 'u_Ka'); 
@@ -184,8 +202,10 @@ async function main(){
     program.u_Ks = gl.getUniformLocation(program, 'u_Ks');
     program.u_shininess = gl.getUniformLocation(program, 'u_shininess');
     program.u_Color = gl.getUniformLocation(program, 'u_Color');
-    program.u_Sampler = gl.getUniformLocation(program, "u_Sampler");
     program.u_useTexture = gl.getUniformLocation(program, "u_useTexture");
+    program.u_Sampler_Texture = gl.getUniformLocation(program, "u_Sampler_Texture");
+    program.u_useNormal = gl.getUniformLocation(program, "u_useNormal");
+    program.u_Sampler_Normal = gl.getUniformLocation(program, "u_Sampler_Normal");
 
     programTextureOnCube = compileShader(gl, VSHADER_SOURCE_TEXTURE_ON_CUBE, FSHADER_SOURCE_TEXTURE_ON_CUBE);
     programTextureOnCube.a_Position = gl.getAttribLocation(programTextureOnCube, 'a_Position'); 
@@ -283,19 +303,28 @@ async function main(){
         draw();
     }
 
+    var switch_perspective = document.getElementById("switch");
+    switch_perspective.checked = true;
+    switch_perspective.oninput = function(){
+        perspective = this.checked;
+        // steve_view = camera[current_screen].first;
+        // current_pers = camera[current_screen][pers];
+        draw();
+    }
+
     window.onkeydown = (e) => {
         if(e.keyCode == 87)
-            camera.outspace.pos_z -= 1;
+            current_pers.pos_z -= 1;
         else if(e.keyCode == 83)
-            camera.outspace.pos_z += 1;
+            current_pers.pos_z += 1;
         else if(e.keyCode == 65)
-            camera.outspace.pos_x -= 1;
+            current_pers.pos_x -= 1;
         else if(e.keyCode == 68)
-            camera.outspace.pos_x += 1;
+            current_pers.pos_x += 1;
         else if(e.keyCode == 32)
-            camera.outspace.pos_y += 1;
+            current_pers.pos_y += 1;
         else if(e.keyCode == 16)
-            camera.outspace.pos_y -= 1;
+            current_pers.pos_y -= 1;
         draw();
     }
 
@@ -408,49 +437,54 @@ function drawOnScreen(){
     rotateMatrix.setRotate(angleY, 1, 0, 0);
     rotateMatrix.rotate(angleX, 0, 1, 0);
 
-    var view_direction = new Vector3([camera.outspace.dir_x, camera.outspace.dir_y, camera.outspace.dir_z]);
+    var view_direction = new Vector3([current_pers.dir_x, current_pers.dir_y, current_pers.dir_z]);
     new_view_dir = rotateMatrix.multiplyVector3(view_direction);
     
     var vpFromCamera = new Matrix4();
     vpFromCamera.setPerspective(60, 1, 1, 100);
 
-    vpFromCamera.lookAt(camera.outspace.pos_x, camera.outspace.pos_y, camera.outspace.pos_z,
-        camera.outspace.pos_x + new_view_dir.elements[0],
-        camera.outspace.pos_y + new_view_dir.elements[1],
-        camera.outspace.pos_z + new_view_dir.elements[2],
-                                0, 1, 0);
+    if(perspective){
+        vpFromCamera.lookAt(
+            current_pers.pos_x,
+            current_pers.pos_y,
+            current_pers.pos_z,
+            current_pers.pos_x + new_view_dir.elements[0],
+            current_pers.pos_y + new_view_dir.elements[1],
+            current_pers.pos_z + new_view_dir.elements[2],
+            0, 1, 0
+        );
+    }
+    else{
+        let dis_r = 3.0 * Math.cos(Math.PI / 180 * angleY);
+        let dis_x = -dis_r * Math.sin(Math.PI / 180 * angleX);
+        let dis_z = dis_r * Math.cos(Math.PI / 180 * angleX);
+        let dis_y = 3.0 * Math.sin(Math.PI / 180 * angleY);
+        vpFromCamera.lookAt(
+            current_pers.pos_x - dis_x,
+            current_pers.pos_y - dis_y,
+            current_pers.pos_z - dis_z,
+            current_pers.pos_x,
+            current_pers.pos_y,
+            current_pers.pos_z,
+            0, 1, 0
+        );
+    }
+
+    let mdlMatrix = new Matrix4();
+    if(!perspective) mdlMatrix.translate(0, 0, -3.0);
+    
+    mdlMatrix.translate(0, -17, 38);
+    mdlMatrix.scale(0.15, 0.15, 0.15);
+    mdlMatrix.rotate(90, 0, 1, 0);
+    drawOneObject(steve, mdlMatrix, vpFromCamera, 0.4, 1.0, 0.4, "Steve.png");
+    mdlMatrix.setIdentity();
+    if(!perspective) mdlMatrix.translate(0, 0, -3.0);
 
     drawPlanets(vpFromCamera);
     drawEnvMap();
-
-    // // set light location
-    // mdlMatrix.translate(0.0, 5.0, 3.0);
-    // mdlMatrix.scale(0.3, 0.3, 0.3);
-    // drawOneObject(ball, mdlMatrix, 1.0, 1.0, 1.0);
-    // mdlMatrix.setIdentity();
-
-    // // setup ground with cube
-    // mdlMatrix.translate(0.0, -0.4, 0.0);
-    // mdlMatrix.scale(7.0, 0.1, 7.0);
-    // drawOneObject(cube, mdlMatrix, 0.7, 0.7, 0.7);
-    // mdlMatrix.setIdentity();
-
-    // // trump object
-    // mdlMatrix.translate(-5.0, -0.3, 0.0);
-    // mdlMatrix.rotate(90, 0, 1, 0);
-    // drawOneObject(trump, mdlMatrix, 1.0, 1.0, 1.0, "trump.png");
-    // mdlMatrix.setIdentity();
-
-    // drawTank();
-
-    // mdlMatrix.translate(0, 7, -10);
-    // mdlMatrix.scale(7.0, 7.0, 0.1);
-    // drawOneObject(screen, mdlMatrix, 0.0, 0.0, 0.0, 'frame_buffer');
-    // mdlMatrix.setIdentity();
     
-    let mdlMatrix = new Matrix4();
-    mdlMatrix.scale(0.7 * scale, 0.7 * scale, 0.7 * scale);
-    drawReflectObject(sphere, mdlMatrix, vpFromCamera, 1, 1, 1);
+    mdlMatrix.scale(5.0, 5.0, 5.0);
+    drawReflectObject(sphere, mdlMatrix, vpFromCamera, 0, 0, 0);
 }
 
 function drawTank(){
@@ -588,15 +622,6 @@ function drawTank(){
     drawOneObject(ball, mdlMatrix, 0.8, 0.8, 0.0);
     mdlMatrix.setIdentity();
 
-    // setup steve
-    mdlMatrix.translate(3.0, 0.5, 0.0);
-    mdlMatrix.multiply(srcMatrix);
-    mdlMatrix.rotate(180, 0, 1, 0);
-    mdlMatrix.translate(-0.6, 0.0, 0.0);
-    mdlMatrix.scale(0.15, 0.15, 0.15);
-    drawOneObject(steve, mdlMatrix, 0.4, 1.0, 0.4, "Steve.png");
-    mdlMatrix.setIdentity();
-
     srcMatrix.rotate(vertical, 0, 0, -1);
 
     // // gun barrel
@@ -610,74 +635,74 @@ function drawTank(){
 }
 
 function drawPlanets(vpMatrix){
-    let mdlMatrix = new Matrix4();
-    mdlMatrix.setIdentity();
+    let srcMatrix = new Matrix4();
+    if(!perspective)
+        srcMatrix.translate(0, 0, -3.0);
 
-    // mdlMatrix.scale(0.7, 0.7, 0.7);
-    // drawOneObject(sphere, mdlMatrix, vpMatrix, 1, 1, 1);
-    // mdlMatrix.setIdentity();
+    let mdlMatrix = new Matrix4();
+    mdlMatrix.set(srcMatrix);
 
     mdlMatrix.rotate(planets[0].angle, 0, 1, 0);
-    mdlMatrix.translate(2.5, 0, 0.19);
+    mdlMatrix.translate(14, 0, 0.19);
     mdlMatrix.scale(1.5, 1.5, 1.5);
-    drawOneObject(planetsObj[0], mdlMatrix, vpMatrix, 0.0, 0.0, 0.0, planets[0].img);
-    mdlMatrix.setIdentity();
+    drawOneObject(planetsObj[0], mdlMatrix, vpMatrix, 0.0, 0.0, 0.0, planets[0].img, "151_norm.jpg");
+    mdlMatrix.set(srcMatrix);
 
     mdlMatrix.rotate(planets[1].angle, 0, 1, 0);
-    mdlMatrix.translate(4.0, -0.3, 0.0);
+    mdlMatrix.translate(16.0, -1.0, 0.0);
     mdlMatrix.scale(0.6, 0.6, 0.6);
-    drawOneObject(planetsObj[1], mdlMatrix, vpMatrix, 0, 0, 0, planets[1].img);
-    mdlMatrix.setIdentity();
+    drawOneObject(planetsObj[1], mdlMatrix, vpMatrix, 0, 0, 0, planets[1].img, "151_norm.jpg");
+    mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[2].angle, 0, 1, 0);
-    mdlMatrix.translate(6.0, 0, 0);
-    drawOneObject(planetsObj[2], mdlMatrix, vpMatrix, 0, 0, 0, planets[2].img);
-    mdlMatrix.setIdentity();
+    mdlMatrix.translate(18.0, 0, 0);
+    drawOneObject(planetsObj[2], mdlMatrix, vpMatrix, 0, 0, 0, planets[2].img, "151_norm.jpg");
+    mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[3].angle, 0, 1, 0);
-    mdlMatrix.translate(8.0, 0, 0.55);
+    mdlMatrix.translate(20.0, 0, 0.55);
     mdlMatrix.scale(3.0, 3.0, 3.0);
-    drawOneObject(planetsObj[3], mdlMatrix, vpMatrix, 0, 0, 0, planets[3].img);
-    mdlMatrix.setIdentity();
+    drawOneObject(planetsObj[3], mdlMatrix, vpMatrix, 0, 0, 0, planets[3].img, "151_norm.jpg");
+    mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[4].angle, 0, 1, 0);
-    mdlMatrix.translate(11.0, 0, 0);
+    mdlMatrix.translate(26.0, 0, 0);
     mdlMatrix.scale(0.2, 0.2, 0.2);
-    drawOneObject(planetsObj[4], mdlMatrix, vpMatrix, 0, 0, 0, planets[4].img);
-    mdlMatrix.setIdentity();
+    drawOneObject(planetsObj[4], mdlMatrix, vpMatrix, 0, 0, 0, planets[4].img, "184_norm.jpg");
+    mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[5].angle, 0, 1, 0);
-    mdlMatrix.translate(11.0, 0, 0);
+    mdlMatrix.translate(26.0, 0, 0);
     mdlMatrix.scale(0.2, 0.2, 0.2);
-    drawOneObject(planetsObj[5], mdlMatrix, vpMatrix, 0, 0, 0, planets[5].img);
-    mdlMatrix.setIdentity();
+    drawOneObject(planetsObj[5], mdlMatrix, vpMatrix, 0, 0, 0, planets[5].img, "184_norm.jpg");
+    mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[6].angle, 0, 1, 0);
-    mdlMatrix.translate(16.0, 0, 0.55);
+    mdlMatrix.translate(34.0, 0, 0.55);
     mdlMatrix.scale(8.0, 8.0, 8.0);
-    drawOneObject(planetsObj[6], mdlMatrix, vpMatrix, 0, 0, 0, planets[6].img);
-    mdlMatrix.setIdentity();
+    drawOneObject(planetsObj[6], mdlMatrix, vpMatrix, 0, 0, 0, planets[6].img, "184_norm.jpg");
+    mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[7].angle, 0, 1, 0);
-    mdlMatrix.translate(16.0, 0, 0.55);
+    mdlMatrix.translate(34.0, 0, 0.55);
     mdlMatrix.scale(8.0, 8.0, 8.0);
-    drawOneObject(planetsObj[7], mdlMatrix, vpMatrix, 0, 0, 0, planets[7].img);
-    mdlMatrix.setIdentity();
+    drawOneObject(planetsObj[7], mdlMatrix, vpMatrix, 0, 0, 0, planets[7].img, "184_norm.jpg");
+    mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[8].angle, 0, 1, 0);
-    mdlMatrix.translate(20.0, 0, 0.55);
+    mdlMatrix.translate(41.0, 0, 0.55);
     mdlMatrix.scale(8.0, 8.0, 8.0);
     drawOneObject(planetsObj[8], mdlMatrix, vpMatrix, 0, 0, 0, planets[8].img);
-    mdlMatrix.setIdentity();
+    mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[9].angle, 0, 1, 0);
-    mdlMatrix.translate(23.0, 0, 0.5);
+    mdlMatrix.translate(47.0, 0, 0.5);
     mdlMatrix.scale(10.0, 10.0, 10.0);
     drawOneObject(planetsObj[9], mdlMatrix, vpMatrix, 0, 0, 0, planets[9].img);
-    mdlMatrix.setIdentity();
+    mdlMatrix.set(srcMatrix);
 }
 
-function drawOneObject(obj, mdlMatrix, vpMatrix, colorR, colorG, colorB, image_name){
+function drawOneObject(obj, mdlMatrix, vpMatrix, colorR, colorG, colorB, image_name = null, normal_name = null){
     gl.useProgram(program);
     
     let mvpMatrix = new Matrix4();
@@ -694,7 +719,7 @@ function drawOneObject(obj, mdlMatrix, vpMatrix, colorR, colorG, colorB, image_n
     normalMatrix.transpose();
 
     gl.uniform3f(program.u_LightPosition, 0.0, 5.0, 3.0);
-    gl.uniform3f(program.u_ViewPosition, camera.outspace.pos_x, camera.outspace.pos_y, camera.outspace.pos_z);
+    gl.uniform3f(program.u_ViewPosition, current_pers.pos_x, current_pers.pos_y, current_pers.pos_z);
     gl.uniform1f(program.u_Ka, 0.2);
     gl.uniform1f(program.u_Kd, 0.7);
     gl.uniform1f(program.u_Ks, 1.0);
@@ -702,13 +727,27 @@ function drawOneObject(obj, mdlMatrix, vpMatrix, colorR, colorG, colorB, image_n
     gl.uniform3f(program.u_Color, colorR, colorG, colorB);
 
     // use texture
-    if(image_name){
+    if(image_name && normal_name){
+        gl.uniform1i(program.u_useNormal, 1);
         gl.uniform1i(program.u_useTexture, 1);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, textures[image_name]);
-        gl.uniform1i(program.u_Sampler, 0);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, textures[normal_name]);
+        gl.uniform1i(program.u_Sampler_Texture, 0);
+        gl.uniform1i(program.u_Sampler_Normal, 1);
     }
-    else gl.uniform1i(program.u_useTexture, 0);
+    else if(image_name){
+        gl.uniform1i(program.u_useNormal, 0);
+        gl.uniform1i(program.u_useTexture, 1);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, textures[image_name]);
+        gl.uniform1i(program.u_Sampler_Texture, 0);
+    }
+    else{
+        gl.uniform1i(program.u_useTexture, 0);
+        gl.uniform1i(program.u_useNormal, 0);
+    }
 
     gl.uniformMatrix4fv(program.u_MvpMatrix, false, mvpMatrix.elements);
     gl.uniformMatrix4fv(program.u_modelMatrix, false, modelMatrix.elements);
@@ -717,7 +756,11 @@ function drawOneObject(obj, mdlMatrix, vpMatrix, colorR, colorG, colorB, image_n
     for(let i = 0; i < obj.length; i++){
         initAttributeVariable(gl, program.a_Position, obj[i].vertexBuffer);
         initAttributeVariable(gl, program.a_Normal, obj[i].normalBuffer);
+        initAttributeVariable(gl, program.a_Tagent, obj[i].tagentsBuffer);
+        initAttributeVariable(gl, program.a_Bitagent, obj[i].bitagentsBuffer);
+        initAttributeVariable(gl, program.a_crossTexCoord, obj[i].crossTexCoordsBuffer);
         if(image_name) initAttributeVariable(gl, program.a_TexCoord, obj[i].texCoordBuffer);
+        if(normal_name) initAttributeVariable(gl, program.a_NormalCoord, obj[i].texCoordBuffer);
         gl.drawArrays(gl.TRIANGLES, 0, obj[i].numVertices);
     }
     gl.bindTexture(gl.TEXTURE_2D, null);
@@ -767,8 +810,8 @@ function renderCubeMap(camX, camY, camZ){
 
     //camera 6 look up vector to render 6 cubemap faces
     var ENV_CUBE_LOOK_UP = [
-        [0.0, -1.0, 0.0],
-        [0.0, -1.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
         [0.0, 0.0, 1.0],
         [0.0, 0.0, -1.0],
         [0.0, -1.0, 0.0],
@@ -787,20 +830,15 @@ function renderCubeMap(camX, camY, camZ){
         let vpMatrix = new Matrix4();
         vpMatrix.setPerspective(90, 1, 1, 100);
         vpMatrix.lookAt(
-            camX + ENV_CUBE_LOOK_DIR[side][0] * 1,
-            camY + ENV_CUBE_LOOK_DIR[side][1] * 1,
-            camZ + ENV_CUBE_LOOK_DIR[side][2] * 1,
-            camX + ENV_CUBE_LOOK_DIR[side][0] * 5,
-            camY + ENV_CUBE_LOOK_DIR[side][1] * 5,
-            camZ + ENV_CUBE_LOOK_DIR[side][2] * 5,
+            camX, camY, camZ,
+            camX + ENV_CUBE_LOOK_DIR[side][0],
+            camY + ENV_CUBE_LOOK_DIR[side][1],
+            camZ + ENV_CUBE_LOOK_DIR[side][2],
             ENV_CUBE_LOOK_UP[side][0],
             ENV_CUBE_LOOK_UP[side][1],
             ENV_CUBE_LOOK_UP[side][2]
         );
         
-        let mdlMatrix = new Matrix4();
-        mdlMatrix.set(vpMatrix);
-        mdlMatrix.scale(1 / scale, 1 / scale, 1 / scale);
         drawPlanets(vpMatrix);
         drawEnvMap(vpMatrix);
     }
@@ -815,16 +853,16 @@ function drawEnvMap(vpMatrix){
         let rotateMatrix = new Matrix4();
         rotateMatrix.setRotate(angleY, 1, 0, 0);//for mouse rotation
         rotateMatrix.rotate(angleX, 0, 1, 0);//for mouse rotation
-        var viewDir= new Vector3([camera.outspace.pos_x, camera.outspace.pos_y, camera.outspace.pos_z]);
+        var viewDir= new Vector3([current_pers.pos_x, current_pers.pos_y, current_pers.pos_z]);
         newViewDir = rotateMatrix.multiplyVector3(viewDir);
     
         var vpFromCamera = new Matrix4();
         vpFromCamera.setPerspective(60, 1, 1, 15);
         var viewMatrixRotationOnly = new Matrix4();
-        viewMatrixRotationOnly.lookAt(camera.outspace.pos_x, camera.outspace.pos_y, camera.outspace.pos_z,
-            camera.outspace.pos_x + new_view_dir.elements[0],
-            camera.outspace.pos_y + new_view_dir.elements[1],
-            camera.outspace.pos_z + new_view_dir.elements[2],
+        viewMatrixRotationOnly.lookAt(current_pers.pos_x, current_pers.pos_y, current_pers.pos_z,
+            current_pers.pos_x + new_view_dir.elements[0],
+            current_pers.pos_y + new_view_dir.elements[1],
+            current_pers.pos_z + new_view_dir.elements[2],
             0, 1, 0);
         
         viewMatrixRotationOnly.elements[12] = 0;

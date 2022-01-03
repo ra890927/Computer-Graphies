@@ -60,13 +60,16 @@ function initArrayBufferForLaterUse(gl, data, num, type) {
     return buffer;
 }
 
-function initVertexBufferForLaterUse(gl, vertices, normals, texCoords){
+function initVertexBufferForLaterUse(gl, vertices, normals, texCoords, tagents, bitagents, crossTexCoords){
     var nVertices = vertices.length / 3;
 
     var o = new Object();
     o.vertexBuffer = initArrayBufferForLaterUse(gl, new Float32Array(vertices), 3, gl.FLOAT);
     if( normals != null ) o.normalBuffer = initArrayBufferForLaterUse(gl, new Float32Array(normals), 3, gl.FLOAT);
     if( texCoords != null ) o.texCoordBuffer = initArrayBufferForLaterUse(gl, new Float32Array(texCoords), 2, gl.FLOAT);
+    if( tagents != null ) o.tagentsBuffer = initArrayBufferForLaterUse(gl, new Float32Array(tagents), 3, gl.FLOAT);
+    if( bitagents != null ) o.bitagentsBuffer = initArrayBufferForLaterUse(gl, new Float32Array(bitagents), 3, gl.FLOAT);
+    if( crossTexCoords != null ) o.crossTexCoordsBuffer = initArrayBufferForLaterUse(gl, new Float32Array(crossTexCoords), 1, gl.FLOAT);
     //you can have error check here
     o.numVertices = nVertices;
 
@@ -211,10 +214,20 @@ async function loadOBJtoCreateVBO( objFile ){
     text = await response.text();
     obj = parseOBJ(text);
     for( let i=0; i < obj.geometries.length; i ++ ){
+        let tagentSpace = calculateTangentSpace(
+            obj.geometries[i].data.position, 
+            obj.geometries[i].data.texcoord
+        );
+
         let o = initVertexBufferForLaterUse(gl, 
-                                            obj.geometries[i].data.position,
-                                            obj.geometries[i].data.normal, 
-                                            obj.geometries[i].data.texcoord);
+            obj.geometries[i].data.position,
+            obj.geometries[i].data.normal, 
+            obj.geometries[i].data.texcoord,
+            tagentSpace.tagents,
+            tagentSpace.bitagents,
+            tagentSpace.crossTexCoords
+        );
+        
         objComponents.push(o);
     }
     return objComponents;
@@ -364,4 +377,72 @@ function parseOBJ(text) {
         geometries,
         materialLibs,
     };
+}
+
+function calculateTangentSpace(position, texcoord){
+    //iterate through all triangles
+    let tagents = [];
+    let bitagents = [];
+    let crossTexCoords = [];
+
+    for( let i = 0; i < position.length / 9; i++ ){
+        let v00 = position[i*9 + 0];
+        let v01 = position[i*9 + 1];
+        let v02 = position[i*9 + 2];
+        let v10 = position[i*9 + 3];
+        let v11 = position[i*9 + 4];
+        let v12 = position[i*9 + 5];
+        let v20 = position[i*9 + 6];
+        let v21 = position[i*9 + 7];
+        let v22 = position[i*9 + 8];
+        let uv00 = texcoord[i*6 + 0];
+        let uv01 = texcoord[i*6 + 1];
+        let uv10 = texcoord[i*6 + 2];
+        let uv11 = texcoord[i*6 + 3];
+        let uv20 = texcoord[i*6 + 4];
+        let uv21 = texcoord[i*6 + 5];
+    
+        let deltaPos10 = v10 - v00;
+        let deltaPos11 = v11 - v01;
+        let deltaPos12 = v12 - v02;
+        let deltaPos20 = v20 - v00;
+        let deltaPos21 = v21 - v01;
+        let deltaPos22 = v22 - v02;
+    
+        let deltaUV10 = uv10 - uv00;
+        let deltaUV11 = uv11 - uv01;
+        let deltaUV20 = uv20 - uv00;
+        let deltaUV21 = uv21 - uv01;
+    
+        let r = 1.0 / (deltaUV10 * deltaUV21 - deltaUV11 * deltaUV20);
+        for( let j=0; j< 3; j++ )
+            crossTexCoords.push( (deltaUV10 * deltaUV21 - deltaUV11 * deltaUV20) );
+
+        let tangentX = (deltaPos10 * deltaUV21 - deltaPos20 * deltaUV11)*r;
+        let tangentY = (deltaPos11 * deltaUV21 - deltaPos21 * deltaUV11)*r;
+        let tangentZ = (deltaPos12 * deltaUV21 - deltaPos22 * deltaUV11)*r;
+        
+        for( let j = 0; j < 3; j++ ){
+            tagents.push(tangentX);
+            tagents.push(tangentY);
+            tagents.push(tangentZ);
+        }
+
+        let bitangentX = (deltaPos20 * deltaUV10 - deltaPos10 * deltaUV20)*r;
+        let bitangentY = (deltaPos21 * deltaUV10 - deltaPos11 * deltaUV20)*r;
+        let bitangentZ = (deltaPos22 * deltaUV10 - deltaPos12 * deltaUV20)*r;
+        
+        for( let j = 0; j < 3; j++ ){
+            bitagents.push(bitangentX);
+            bitagents.push(bitangentY);
+            bitagents.push(bitangentZ);
+        }
+    }
+
+    let obj = {};
+    obj['tagents'] = tagents;
+    obj['bitagents'] = bitagents;
+    obj['crossTexCoords'] = crossTexCoords;
+    
+    return obj;
 }

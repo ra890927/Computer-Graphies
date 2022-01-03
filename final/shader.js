@@ -2,34 +2,61 @@ var VSHADER_SOURCE = `
     attribute vec4 a_Position;
     attribute vec4 a_Normal;
     attribute vec2 a_TexCoord;
+    attribute vec2 a_NormalCoord;
+    attribute vec3 a_Tagent;
+    attribute vec3 a_Bitagent;
+    attribute float a_crossTexCoord;
     uniform mat4 u_MvpMatrix;
     uniform mat4 u_modelMatrix;
     uniform mat4 u_normalMatrix;
-    varying vec3 v_Normal;
-    varying vec3 v_PositionInWorld;
     varying vec2 v_TexCoord;
+    varying vec2 v_NormalCoord;
+    varying vec3 v_PositionInWorld;
+    varying vec3 v_Normal;
+    varying mat4 v_TBN;
     void main(){
         gl_Position = u_MvpMatrix * a_Position;
         v_PositionInWorld = (u_modelMatrix * a_Position).xyz; 
         v_Normal = normalize(vec3(u_normalMatrix * a_Normal));
         v_TexCoord = a_TexCoord;
+        v_NormalCoord = a_NormalCoord;
+        //create TBN matrix 
+        vec3 tagent = normalize(a_Tagent);
+        vec3 bitagent = normalize(a_Bitagent);
+        vec3 nVector;
+        if( a_crossTexCoord > 0.0){
+          nVector = cross(tagent, bitagent);
+        } else{
+          nVector = cross(bitagent, tagent);
+        }
+        v_TBN = mat4(
+            tagent.x, tagent.y, tagent.z, 0.0, 
+            bitagent.x, bitagent.y, bitagent.z, 0.0,
+            nVector.x, nVector.y, nVector.z, 0.0, 
+            0.0, 0.0, 0.0, 1.0
+        );
     }    
 `;
 
 var FSHADER_SOURCE = `
     precision mediump float;
+    uniform int u_useTexture;       // whether use texture
+    uniform int u_useNormal;
+    uniform vec3 u_Color;           // object color
     uniform vec3 u_ViewPosition;
+    uniform vec3 u_LightPosition;   // light position
     uniform float u_Ka;
     uniform float u_Kd;
     uniform float u_Ks;
     uniform float u_shininess;
-    uniform sampler2D u_Sampler;    // texture sampler
-    uniform vec3 u_Color;           // object color
-    uniform int u_useTexture;       // whether use texture
-    uniform vec3 u_LightPosition;   // light position
+    uniform highp mat4 u_normalMatrix;
+    uniform sampler2D u_Sampler_Texture;    // texture sampler
+    uniform sampler2D u_Sampler_Normal;     // texture sampler
+    varying mat4 v_TBN;
     varying vec3 v_Normal;
     varying vec3 v_PositionInWorld;
     varying vec2 v_TexCoord;
+    varying vec2 v_NormalCoord;
     void main(){
         // define light color
         vec3 ambientLightColor;
@@ -37,7 +64,7 @@ var FSHADER_SOURCE = `
 
         if(bool(u_useTexture)){
             // use texture color
-            vec3 texColor = texture2D( u_Sampler, v_TexCoord ).rgb;
+            vec3 texColor = texture2D( u_Sampler_Texture, v_TexCoord ).rgb;
             ambientLightColor = texColor;
             diffuseLightColor = texColor;
         }
@@ -47,12 +74,22 @@ var FSHADER_SOURCE = `
             diffuseLightColor = u_Color;
         }
 
+        // define normal vector
+        vec3 normal;
+
+        if(bool(u_useNormal)){
+            vec3 nMapNormal = normalize( texture2D( u_Sampler_Normal, v_NormalCoord ).rgb * 2.0 - 1.0 );
+            normal = normalize( vec3( u_normalMatrix * v_TBN * vec4( nMapNormal, 1.0) ) );
+        }
+        else{
+            normal = normalize(v_Normal);
+        }
+
         // assume white specular light
         vec3 specularLightColor = vec3(1.0, 1.0, 1.0);        
 
         vec3 ambient = ambientLightColor * u_Ka;
 
-        vec3 normal = normalize(v_Normal);
         // compute lihgt direction vector
         vec3 lightDirection = normalize(u_LightPosition - v_PositionInWorld);
         // if angle larger than 90, do not use
