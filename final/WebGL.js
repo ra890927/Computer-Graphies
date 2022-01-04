@@ -21,48 +21,28 @@ var offCameraDirX = 0, offCameraDirY = -1, offCameraDirZ = -1;   // offscreen vi
 var gl, canvas, reflectBall;
 
 var camera = {
-    war: {
-        first: {
-            pos_x: 0,
-            pos_y: 0,
-            pos_z: 5,
-            dir_x: 0,
-            dir_y: 0,
-            dir_z: -1,
-        },
-        third: {
-            pos_x: 0,
-            pos_y: -16,
-            pos_z: 38,
-            dir_x: 0,
-            dir_y: 16,
-            dir_z: -38,
-        },
+    War: {
+        pos_x: 0,
+        pos_y: 3,
+        pos_z: 15,
+        dir_x: 0,
+        dir_y: 0,
+        dir_z: -1,
     },
-    outspace: {
-        first: {
-            pos_x: 0,
-            pos_y: -16,
-            pos_z: 38,
-            dir_x: 0,
-            dir_y: 16,
-            dir_z: -38,
-        },
-        third: {
-            pos_x: 0,
-            pos_y: -16,
-            pos_z: 41,
-            dir_x: 0,
-            dir_y: 16,
-            dir_z: -38,
-        },
+    Outspace: {
+        pos_x: 0,
+        pos_y: -16,
+        pos_z: 38,
+        dir_x: 0,
+        dir_y: 16,
+        dir_z: -38,
     },
 }
 
 var perspective = true;
 var steve_view = {};
-var current_screen = 'outspace';
-var current_pers = camera.outspace.first;
+var current_screen = 'War';
+var current_pers = camera[current_screen];
 
 // image name and object
 var textures = {};                                      // texture object
@@ -71,6 +51,7 @@ var imgNames = [                                        // define image name
     "trump.png",
     "151_norm.jpg",
     "184_norm.jpg",
+    "spstob_1.jpg"
 ];
 
 // 3D item object
@@ -82,6 +63,7 @@ var ball = [];                                          // ball object
 var pyramid = [];                                       // pyramid object
 var cylinder = [];                                      // cylinder object
 var screen = [];
+var shuttle = [];
 
 // planets
 var planets = [
@@ -149,6 +131,9 @@ var planets = [
 
 var planetsObj = [];
 
+// secret
+var secret_string = '';
+
 async function main(){
     canvas = document.getElementById('webgl');
     gl = canvas.getContext('webgl2');
@@ -169,11 +154,15 @@ async function main(){
     // initialize framebuffer object
     reflectBall = initFrameBufferForCubemapRendering(gl);
     quadObj = initVertexBufferForLaterUse(gl, quad);
-    // cubeMapTex = initCubeTexture("posx.jpg", "negx.jpg", "posy.jpg", "negy.jpg", 
-    //     "posz.jpg", "negz.jpg", 2048, 2048);
-    
-    cubeMapTex = initCubeTexture("px.jpg", "nx.jpg", "py.jpg", "ny.jpg", 
-        "pz.jpg", "nz.jpg", 350, 350);
+
+    if(current_screen === 'War'){
+        cubeMapTex = initCubeTexture("posx.jpg", "negx.jpg", "posy.jpg", "negy.jpg", 
+                "posz.jpg", "negz.jpg", 2048, 2048);
+    }
+    else{
+        cubeMapTex = initCubeTexture("px.jpg", "nx.jpg", "py.jpg", "ny.jpg", 
+                "pz.jpg", "nz.jpg", 350, 350);
+    }
     
     // define environment cubemap shader
     programEnvCube = compileShader(gl, VSHADER_SOURCE_ENVCUBE, FSHADER_SOURCE_ENVCUBE);
@@ -222,6 +211,7 @@ async function main(){
     trump = await loadOBJtoCreateVBO('trump.obj');
     sphere = await loadOBJtoCreateVBO('sphere.obj');
     screen = await loadOBJtoCreateVBO('cube.obj');
+    shuttle = await loadOBJtoCreateVBO('space-shuttle-orbiter.obj');
 
     // define planets obj
     for await (planet of planets)
@@ -273,6 +263,24 @@ async function main(){
     canvas.onmousemove = function(ev){mouseMove(ev)};
     canvas.onmouseup = function(ev){mouseUp(ev)};
 
+    var switch_perspective = document.getElementById("switch");
+    switch_perspective.checked = true;
+    switch_perspective.oninput = function(){
+        perspective = this.checked;
+        draw();
+    }
+
+    var switch_screen = document.getElementById("screen");
+    switch_screen.oninput = function(){
+        current_screen = this.checked ? 'Outspace' : 'War';
+        current_pers = camera[current_screen];
+        if(current_screen === 'Outspace')
+            document.getElementById("tank_params").style.display = 'none';
+        else
+            document.getElementById("tank_params").style.display = 'flex';
+        main();
+    }
+
     var scale_slider = document.getElementById("scale");
     scale_slider.oninput = function(){
         scale = Number(this.value) * 3 / 100;
@@ -302,16 +310,7 @@ async function main(){
         vertical = this.value;
         draw();
     }
-
-    var switch_perspective = document.getElementById("switch");
-    switch_perspective.checked = true;
-    switch_perspective.oninput = function(){
-        perspective = this.checked;
-        // steve_view = camera[current_screen].first;
-        // current_pers = camera[current_screen][pers];
-        draw();
-    }
-
+    
     window.onkeydown = (e) => {
         if(e.keyCode == 87)
             current_pers.pos_z -= 1;
@@ -325,125 +324,62 @@ async function main(){
             current_pers.pos_y += 1;
         else if(e.keyCode == 16)
             current_pers.pos_y -= 1;
+        
+        if(secret_string.length >= 10 || e.keyCode == 8)
+            secret_string = '';
+        else secret_string += e.key;
+        
+        console.log(secret_string)
+        
+        if(secret_string === 'allpass'){
+            reset_planets().then(() => {
+                alert("Wish everyone all pass this semester!!!");
+            });
+        }
+
         draw();
     }
 
-    var tick = function() {
-        planets.forEach(planet => {
-            planet.angle = (planet.angle + planet.speed) % 360;
-        });
-        draw();
-        requestAnimationFrame(tick);
+    if(current_screen === 'Outspace'){
+        var tick = function() {
+            if(secret_string === 'allpass') return;
+            planets.forEach(planet => {
+                planet.angle = (planet.angle + planet.speed) % 360;
+            });
+            draw();
+            requestAnimationFrame(tick);
+        }
+
+        planets[5].angle = planets[4].angle;
+        planets[7].angle = planets[6].angle;
+
+        // planets.forEach(planet => {
+        //     planet.angle = 0;
+        // });
+
+        tick();
     }
-
-    planets[5].angle = planets[4].angle;
-    planets[7].angle = planets[6].angle;
-
-    // planets.forEach(planet => {
-    //     planet.angle = 0;
-    // });
-
-    tick();
 }
 
 function draw(){
-    // gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    // gl.viewport(0, 0, offScreenWidth, offScreenHeight);
-    // drawOffScreen();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    drawOnScreen();
-}
+    if(current_screen === 'Outspace') renderCubeMap(0, 0, 0);
 
-function drawOffScreen(){
-    // clear canvas
-    gl.clearColor(0,0,0,1);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    // open gl depth render
-    gl.enable(gl.DEPTH_TEST);
-
-    var rotateMatrix = new Matrix4();
-    rotateMatrix.setRotate(angleY, 1, 0, 0);
-    rotateMatrix.rotate(angleX, 0, 1, 0);
-
-    var view_direction = new Vector3([offCameraDirX, offCameraDirY, offCameraDirZ]);
-    new_view_dir = rotateMatrix.multiplyVector3(view_direction);
-    
-    var vpFromCamera = new Matrix4();
-    vpFromCamera.setPerspective(60, 1, 1, 200);
-    var viewMatrixRotationOnly = new Matrix4();
-
-    viewMatrixRotationOnly.lookAt(offCameraX, offCameraY, offCameraZ,
-                                offCameraX + new_view_dir.elements[0],
-                                offCameraY + new_view_dir.elements[1],
-                                offCameraZ + new_view_dir.elements[2],
-                                0, 1, 0);
-
-    viewMatrixRotationOnly.elements[12] = 0;
-    viewMatrixRotationOnly.elements[13] = 0;
-    viewMatrixRotationOnly.elements[14] = 0;
-
-    vpFromCamera.multiply(viewMatrixRotationOnly);
-    var vpFromCameraInverse = vpFromCamera.invert();
-
-    // background quad shader
-    gl.useProgram(programEnvCube);
-    gl.depthFunc(gl.LEQUAL);
-    gl.uniformMatrix4fv(programEnvCube.u_viewDirectionProjectionInverse, false, vpFromCameraInverse.elements);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeMapTex);
-    gl.uniform1i(programEnvCube.u_envCubeMap, 0);
-    initAttributeVariable(gl, programEnvCube.a_Position, quadObj.vertexBuffer);
-    gl.drawArrays(gl.TRIANGLES, 0, quadObj.numVertices);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-
-    shaderMode = 'off';
-    let mdlMatrix = new Matrix4(); //model matrix of objects
-    mdlMatrix.setIdentity();
-
-    // set light location
-    mdlMatrix.translate(0.0, 5.0, 3.0);
-    mdlMatrix.scale(0.3, 0.3, 0.3);
-    drawOneObject(ball, mdlMatrix, 1.0, 1.0, 1.0);
-    mdlMatrix.setIdentity();
-
-    // setup ground with cube
-    mdlMatrix.translate(0.0, -0.4, 0.0);
-    mdlMatrix.scale(7.0, 0.1, 7.0);
-    drawOneObject(cube, mdlMatrix, 0.7, 0.7, 0.7);
-    mdlMatrix.setIdentity();
-
-    // trump object
-    mdlMatrix.translate(-5.0, -0.3, 0.0);
-    mdlMatrix.rotate(90, 0, 1, 0);
-    drawOneObject(trump, mdlMatrix, 1.0, 1.0, 1.0, "trump.png");
-    mdlMatrix.setIdentity();
-
-    drawTank();
-}
-
-function drawOnScreen(){
-    renderCubeMap(0, 0, 0);
-
-    // clear canvas
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    // open gl depth render
+    gl.viewport(0, 0, canvas.width, canvas.height);
     gl.enable(gl.DEPTH_TEST);
 
-    var rotateMatrix = new Matrix4();
-    rotateMatrix.setRotate(angleY, 1, 0, 0);
-    rotateMatrix.rotate(angleX, 0, 1, 0);
-
-    var view_direction = new Vector3([current_pers.dir_x, current_pers.dir_y, current_pers.dir_z]);
-    new_view_dir = rotateMatrix.multiplyVector3(view_direction);
-    
     var vpFromCamera = new Matrix4();
     vpFromCamera.setPerspective(60, 1, 1, 100);
-
+    
     if(perspective){
+        var rotateMatrix = new Matrix4();
+        rotateMatrix.setRotate(angleY, 1, 0, 0);
+        rotateMatrix.rotate(angleX, 0, 1, 0);
+    
+        var view_direction = new Vector3([current_pers.dir_x, current_pers.dir_y, current_pers.dir_z]);
+        new_view_dir = rotateMatrix.multiplyVector3(view_direction);
+
         vpFromCamera.lookAt(
             current_pers.pos_x,
             current_pers.pos_y,
@@ -456,9 +392,10 @@ function drawOnScreen(){
     }
     else{
         let dis_r = 3.0 * Math.cos(Math.PI / 180 * angleY);
-        let dis_x = -dis_r * Math.sin(Math.PI / 180 * angleX);
-        let dis_z = dis_r * Math.cos(Math.PI / 180 * angleX);
+        let dis_x = dis_r * Math.sin(Math.PI / 180 * angleX);
+        let dis_z = -dis_r * Math.cos(Math.PI / 180 * angleX);
         let dis_y = 3.0 * Math.sin(Math.PI / 180 * angleY);
+        
         vpFromCamera.lookAt(
             current_pers.pos_x - dis_x,
             current_pers.pos_y - dis_y,
@@ -470,10 +407,16 @@ function drawOnScreen(){
         );
     }
 
+    this ['draw' + current_screen](vpFromCamera);
+}
+
+function drawOutspace(vpFromCamera){
+    scale = 1.5;
+
     let mdlMatrix = new Matrix4();
     if(!perspective) mdlMatrix.translate(0, 0, -3.0);
     
-    mdlMatrix.translate(0, -17, 38);
+    mdlMatrix.translate(camera.Outspace.pos_x, camera.Outspace.pos_y - 1, camera.Outspace.pos_z);
     mdlMatrix.scale(0.15, 0.15, 0.15);
     mdlMatrix.rotate(90, 0, 1, 0);
     drawOneObject(steve, mdlMatrix, vpFromCamera, 0.4, 1.0, 0.4, "Steve.png");
@@ -487,22 +430,62 @@ function drawOnScreen(){
     drawReflectObject(sphere, mdlMatrix, vpFromCamera, 0, 0, 0);
 }
 
-function drawTank(){
+function drawWar(vpFromCamera){
+    scale = 1.0;
+
+    let mdlMatrix = new Matrix4();
+    if(!perspective) mdlMatrix.translate(0, 0, -3.0);
+    
+    mdlMatrix.translate(camera.War.pos_x, camera.War.pos_y - 1, camera.War.pos_z);
+    mdlMatrix.scale(0.15, 0.15, 0.15);
+    mdlMatrix.rotate(90, 0, 1, 0);
+    drawOneObject(steve, mdlMatrix, vpFromCamera, 0.4, 1.0, 0.4, "Steve.png");
+    mdlMatrix.setIdentity();
+
+    // setup ground with cube
+    mdlMatrix.translate(0.0, -0.4, 0.0);
+    mdlMatrix.scale(10.0, 0.1, 10.0);
+    drawOneObject(cube, mdlMatrix, vpFromCamera, 0.7, 0.7, 0.7);
+    mdlMatrix.setIdentity();
+    if(!perspective) mdlMatrix.translate(0, 0, -3.0);
+
+    // trump object
+    mdlMatrix.translate(-5.0, -0.3, 0.0);
+    mdlMatrix.rotate(90, 0, 1, 0);
+    drawOneObject(trump, mdlMatrix, vpFromCamera, 1.0, 1.0, 1.0, "trump.png");
+    mdlMatrix.setIdentity();
+
+    mdlMatrix.translate(-3.0, 0, 0);
+    drawTank(vpFromCamera, mdlMatrix);
+    mdlMatrix.setIdentity();
+    mdlMatrix.translate(-1.5, 0, 3.0);
+    drawTank(vpFromCamera, mdlMatrix);
+    mdlMatrix.setIdentity();
+    mdlMatrix.translate(0.5, 0.0, -3.0);
+    drawTank(vpFromCamera, mdlMatrix);
+    mdlMatrix.setIdentity();
+    drawEnvMap();
+}
+
+function drawTank(vpMatrix, mvMatrix){
     let srcMatrix = new Matrix4();
     let mdlMatrix = new Matrix4();
+
+    srcMatrix.set(mvMatrix);
     srcMatrix.translate(tank_x, 0.0, tank_y);
+    if(!perspective) srcMatrix.translate(0, 0, -3.0);
 
     // left front wheel
     mdlMatrix.translate(2.0, 0.0, 0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.3, 0.3, 0.3);
-    drawOneObject(cylinder, mdlMatrix, 0, 0, 0);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0, 0, 0);
     mdlMatrix.setIdentity();
 
     mdlMatrix.translate(2.0, 0.0, 0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.25, 0.25, 0.31);
-    drawOneObject(cylinder, mdlMatrix, 0.00784, 0.36863, 0.12941);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0.00784, 0.36863, 0.12941);
     mdlMatrix.setIdentity();
 
     // left front pyramid
@@ -511,20 +494,20 @@ function drawTank(){
     mdlMatrix.rotate(90, 1, 0, 0);
     mdlMatrix.rotate((tank_x - 3.0) * 45, 0, -1, 0);
     mdlMatrix.scale(0.2, 0.2, 0.2);
-    drawOneObject(pyramid, mdlMatrix, 1.0, 1.0, 0.0);
+    drawOneObject(pyramid, mdlMatrix, vpMatrix, 1.0, 1.0, 0.0);
     mdlMatrix.setIdentity();
 
     // left back wheel
     mdlMatrix.translate(4.0, 0.0, 0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.3, 0.3, 0.3);
-    drawOneObject(cylinder, mdlMatrix, 0, 0, 0);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0, 0, 0);
     mdlMatrix.setIdentity();
     
     mdlMatrix.translate(4.0, 0.0, 0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.25, 0.25, 0.31);
-    drawOneObject(cylinder, mdlMatrix, 0.00784, 0.36863, 0.12941);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0.00784, 0.36863, 0.12941);
     mdlMatrix.setIdentity();
 
     // left back pyramid
@@ -533,20 +516,20 @@ function drawTank(){
     mdlMatrix.rotate(90, 1, 0, 0);
     mdlMatrix.rotate((tank_x - 3.0) * 45, 0, -1, 0);
     mdlMatrix.scale(0.2, 0.2, 0.2);
-    drawOneObject(pyramid, mdlMatrix, 1.0, 1.0, 0.0);
+    drawOneObject(pyramid, mdlMatrix, vpMatrix, 1.0, 1.0, 0.0);
     mdlMatrix.setIdentity();
 
     // right front wheel
     mdlMatrix.translate(2.0, 0.0, -0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.3, 0.3, 0.3);
-    drawOneObject(cylinder, mdlMatrix, 0, 0, 0);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0, 0, 0);
     mdlMatrix.setIdentity();
     
     mdlMatrix.translate(2.0, 0.0, -0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.25, 0.25, 0.31);
-    drawOneObject(cylinder, mdlMatrix, 0.00784, 0.36863, 0.12941);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0.00784, 0.36863, 0.12941);
     mdlMatrix.setIdentity();
 
     // right front pyramid
@@ -555,20 +538,20 @@ function drawTank(){
     mdlMatrix.rotate(90, -1, 0, 0);
     mdlMatrix.rotate((tank_x - 3.0) * 45, 0, 1, 0);
     mdlMatrix.scale(0.2, 0.2, 0.2);
-    drawOneObject(pyramid, mdlMatrix, 1.0, 1.0, 0.0);
+    drawOneObject(pyramid, mdlMatrix, vpMatrix, 1.0, 1.0, 0.0);
     mdlMatrix.setIdentity();
 
     // right back wheel
     mdlMatrix.translate(4.0, 0.0, -0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.3, 0.3, 0.3);
-    drawOneObject(cylinder, mdlMatrix, 0, 0, 0);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0, 0, 0);
     mdlMatrix.setIdentity();
     
     mdlMatrix.translate(4.0, 0.0, -0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.25, 0.25, 0.31);
-    drawOneObject(cylinder, mdlMatrix, 0.00784, 0.36863, 0.12941);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0.00784, 0.36863, 0.12941);
     mdlMatrix.setIdentity();
 
     // right back pyramid
@@ -577,33 +560,33 @@ function drawTank(){
     mdlMatrix.rotate(90, -1, 0, 0);
     mdlMatrix.rotate((tank_x - 3.0) * 45, 0, 1, 0);
     mdlMatrix.scale(0.2, 0.2, 0.2);
-    drawOneObject(pyramid, mdlMatrix, 1.0, 1.0, 0.0);
+    drawOneObject(pyramid, mdlMatrix, vpMatrix, 1.0, 1.0, 0.0);
     mdlMatrix.setIdentity();
 
     // left rectangle
     mdlMatrix.translate(3.0, 0.0, 0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(1.0, 0.3, 0.3);
-    drawOneObject(cube, mdlMatrix, 0, 0, 0);
+    drawOneObject(cube, mdlMatrix, vpMatrix, 0, 0, 0);
     mdlMatrix.setIdentity();
     
     mdlMatrix.translate(3.0, 0.0, 0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(1.0, 0.25, 0.31);
-    drawOneObject(cube, mdlMatrix, 0.00784, 0.36863, 0.12941);
+    drawOneObject(cube, mdlMatrix, vpMatrix, 0.00784, 0.36863, 0.12941);
     mdlMatrix.setIdentity();
 
     // right rectangle
     mdlMatrix.translate(3.0, 0.0, -0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(1.0, 0.3, 0.3);
-    drawOneObject(cube, mdlMatrix, 0, 0, 0);
+    drawOneObject(cube, mdlMatrix, vpMatrix, 0, 0, 0);
     mdlMatrix.setIdentity();
     
     mdlMatrix.translate(3.0, 0.0, -0.8);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(1.0, 0.25, 0.31);
-    drawOneObject(cube, mdlMatrix, 0.00784, 0.36863, 0.12941);
+    drawOneObject(cube, mdlMatrix, vpMatrix, 0.00784, 0.36863, 0.12941);
     mdlMatrix.setIdentity();
 
     srcMatrix.rotate(direction, 0, 1, 0);
@@ -612,14 +595,14 @@ function drawTank(){
     mdlMatrix.translate(3.0, 0.3, 0.0);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.7, 0.3, 0.7);
-    drawOneObject(cube, mdlMatrix, 0.00784, 0.36863, 0.12941);
+    drawOneObject(cube, mdlMatrix, vpMatrix, 0.00784, 0.36863, 0.12941);
     mdlMatrix.setIdentity();
 
     // center fort
     mdlMatrix.translate(3.0, 0.6, 0.0);
     mdlMatrix.multiply(srcMatrix);
     mdlMatrix.scale(0.5, 0.5, 0.5);
-    drawOneObject(ball, mdlMatrix, 0.8, 0.8, 0.0);
+    drawOneObject(ball, mdlMatrix, vpMatrix, 0.8, 0.8, 0.0);
     mdlMatrix.setIdentity();
 
     srcMatrix.rotate(vertical, 0, 0, -1);
@@ -630,7 +613,7 @@ function drawTank(){
     mdlMatrix.rotate(90, 0, 1, 0);
     mdlMatrix.translate(0.0, 0.0, -1.0);
     mdlMatrix.scale(0.15, 0.15, 1.0);
-    drawOneObject(cylinder, mdlMatrix, 0.00784, 0.36863, 0.12941);
+    drawOneObject(cylinder, mdlMatrix, vpMatrix, 0.00784, 0.36863, 0.12941);
     mdlMatrix.setIdentity();
 }
 
@@ -657,6 +640,12 @@ function drawPlanets(vpMatrix){
     mdlMatrix.rotate(planets[2].angle, 0, 1, 0);
     mdlMatrix.translate(18.0, 0, 0);
     drawOneObject(planetsObj[2], mdlMatrix, vpMatrix, 0, 0, 0, planets[2].img, "151_norm.jpg");
+    mdlMatrix.set(srcMatrix);
+
+    mdlMatrix.rotate(planets[2].angle, 0, 1, 0);
+    mdlMatrix.translate(19.0, 3.0, 0);
+    mdlMatrix.scale(0.01, 0.01, 0.01);
+    drawOneObject(shuttle, mdlMatrix, vpMatrix, 0, 0, 0, "spstob_1.jpg");
     mdlMatrix.set(srcMatrix);
     
     mdlMatrix.rotate(planets[3].angle, 0, 1, 0);
@@ -756,10 +745,12 @@ function drawOneObject(obj, mdlMatrix, vpMatrix, colorR, colorG, colorB, image_n
     for(let i = 0; i < obj.length; i++){
         initAttributeVariable(gl, program.a_Position, obj[i].vertexBuffer);
         initAttributeVariable(gl, program.a_Normal, obj[i].normalBuffer);
-        initAttributeVariable(gl, program.a_Tagent, obj[i].tagentsBuffer);
-        initAttributeVariable(gl, program.a_Bitagent, obj[i].bitagentsBuffer);
-        initAttributeVariable(gl, program.a_crossTexCoord, obj[i].crossTexCoordsBuffer);
-        if(image_name) initAttributeVariable(gl, program.a_TexCoord, obj[i].texCoordBuffer);
+        if(image_name){
+            initAttributeVariable(gl, program.a_Tagent, obj[i].tagentsBuffer);
+            initAttributeVariable(gl, program.a_Bitagent, obj[i].bitagentsBuffer);
+            initAttributeVariable(gl, program.a_crossTexCoord, obj[i].crossTexCoordsBuffer);
+            initAttributeVariable(gl, program.a_TexCoord, obj[i].texCoordBuffer);
+        }
         if(normal_name) initAttributeVariable(gl, program.a_NormalCoord, obj[i].texCoordBuffer);
         gl.drawArrays(gl.TRIANGLES, 0, obj[i].numVertices);
     }
@@ -857,7 +848,7 @@ function drawEnvMap(vpMatrix){
         newViewDir = rotateMatrix.multiplyVector3(viewDir);
     
         var vpFromCamera = new Matrix4();
-        vpFromCamera.setPerspective(60, 1, 1, 15);
+        vpFromCamera.setPerspective(60, 1, 1, 100);
         var viewMatrixRotationOnly = new Matrix4();
         viewMatrixRotationOnly.lookAt(current_pers.pos_x, current_pers.pos_y, current_pers.pos_z,
             current_pers.pos_x + new_view_dir.elements[0],
@@ -920,4 +911,50 @@ function mouseMove(ev){
     mouseLastY = y;
 
     draw();
+}
+
+async function reset_planets(){
+    angleX = -48;
+    angleY = -48;
+    current_pers = {
+        dir_x: 0,
+        dir_y: 16,
+        dir_z: -38,
+        pos_x: -62,
+        pos_y: 20,
+        pos_z: 70,
+    };
+
+    return new Promise(function(resolve, reject){
+        var clock = setInterval(() => {
+            let change = true;
+            for(let i = 0; i < 8; i++){
+                let index = i > 4 ? (i > 5 ? i + 2 : i + 1) : i;
+                if(i % 2 == 0){
+                    if(planets[index].angle == 120) continue;
+                    else{
+                        change = false;
+                        planets[index].angle = (planets[index].angle + 1) % 360;
+                        planets[index].angle = Math.abs(planets[index].angle - 120) <= 3 ? 120 : planets[index].angle;
+                    }
+                }
+                else{
+                    if(planets[index].angle == 300) continue;
+                    else{
+                        change = false;
+                        planets[index].angle = (planets[index].angle + 1) % 360;
+                        planets[index].angle = Math.abs(planets[index].angle - 300) <= 3 ? 300 : planets[index].angle;
+                    }
+                }
+                
+                planets[5].angle = planets[4].angle;
+                planets[7].angle = planets[6].angle;
+            }
+            if(change){
+                clearInterval(clock);
+                resolve(1);
+            }
+            else draw()
+        }, 50);
+    });
 }
