@@ -76,24 +76,38 @@
     </head>
 
     <body onload="main()">
-        <canvas id="webgl" width = "800" height = "800">
-            Please use a browser that support "canvas"
-        </canvas>
-        
-        <div class="switch">
-            <input class="switch-checkbox" id="switch" type="checkbox" name="switch-checkbox">
-            <label class="switch-label" for="switch">
-                <span class="switch-txt" turnOn="First-person perspective" turnOff="Third-person perspective"></span>
-                <span class="switch-Round-btn"></span>
-            </label>
-        </div>
+        <div style="width: 60vw; display: flex;">
+            <canvas id="webgl" width = "800" height = "800">
+                Please use a browser that support "canvas"
+            </canvas>
+            
+            <div style="width: 50%; margin-left: 3vw;">
+                <div style="display: flex; justify-content: center; width: 600px; margin: 15px 0;">
+                    <div class="switch" style="margin-right: 20px;">
+                        <input class="switch-checkbox" id="switch" type="checkbox" name="switch-checkbox">
+                        <label class="switch-label" for="switch">
+                            <span class="switch-txt" turnOn="First-person perspective" turnOff="Third-person perspective"></span>
+                            <span class="switch-Round-btn"></span>
+                        </label>
+                    </div>
 
-        <div style="display: flex; flex-direction: column; justify-content: center; width: 800px;">
-            Scale: <input type="range" min="5" max="15" value="10" id="scale">
-            Tank x: <input type="range" min="-80" max="80" value="0" id="tank_x">
-            Tank y: <input type="range" min="-80" max="80" value="0" id="tank_y">
-            Direction: <input type="range" min="-90" max="90" value="0" id="direction">
-            Veritcal: <input type="range" min="0" max="80" value="0" id="vertical">
+                    <div class="switch">
+                        <input class="switch-checkbox" id="screen" type="checkbox" name="switch-checkbox">
+                        <label class="switch-label" for="screen">
+                            <span class="switch-txt" turnOn="Outspace" turnOff="War"></span>
+                            <span class="switch-Round-btn"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="tank_params" style="display: flex; flex-direction: column; width: 600px; margin: 0 auto;">
+                    Scale: <input type="range" min="5" max="15" value="10" id="scale">
+                    Tank x: <input type="range" min="-80" max="80" value="0" id="tank_x">
+                    Tank y: <input type="range" min="-80" max="80" value="0" id="tank_y">
+                    Direction: <input type="range" min="-90" max="90" value="0" id="direction">
+                    Veritcal: <input type="range" min="0" max="80" value="0" id="vertical">
+                </div>
+            </div>
         </div>
         
         <script src="cuon-matrix.js"></script>
